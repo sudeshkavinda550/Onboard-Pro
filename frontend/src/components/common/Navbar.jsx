@@ -45,7 +45,9 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const UserAvatar = ({ user, darkMode }) => {
   const [imgError, setImgError] = useState(false);
   const profilePicUrl = user?.profile_picture && !imgError
-    ? `${BASE_URL}${user.profile_picture}`
+    ? (user.profile_picture.startsWith('http') 
+        ? user.profile_picture 
+        : `${BASE_URL}${user.profile_picture}`)
     : null;
 
   return (

@@ -333,12 +333,13 @@ const employeeController = {
     sendSuccess(res, 200, 'Reminder sent successfully');
   }),
 
-  uploadProfilePicture: asyncHandler(async (req, res) => {
+ uploadProfilePicture: asyncHandler(async (req, res) => {
     if (!req.file) {
       return sendError(res, 400, 'No file uploaded');
     }
 
-    const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
+    // Cloudinary returns full URL in req.file.path
+    const profilePictureUrl = req.file.path;
     await User.updateProfile(req.user.id, { profile_picture: profilePictureUrl });
 
     sendSuccess(res, 200, 'Profile picture uploaded successfully', {

@@ -1,224 +1,87 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// Helper function to create directory if it doesn't exist
-const ensureDirectoryExists = (dirPath) => {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-};
-
-// Create base uploads directory structure
-const baseUploadDir = path.join(__dirname, '../../uploads');
-ensureDirectoryExists(baseUploadDir);
-
-// ==================== PROFILE PICTURES CONFIGURATION ====================
-const profileUploadDir = path.join(baseUploadDir, 'profile-pictures');
-ensureDirectoryExists(profileUploadDir);
-
-const profileStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, profileUploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const fileExt = path.extname(file.originalname);
-    cb(null, `profile-${uniqueSuffix}${fileExt}`);
-  }
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const profileFileFilter = (req, file, cb) => {
-  // Accept images only for profile pictures
-  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed for profile pictures!'), false);
-  }
-};
-
-// ==================== TEMPLATE DOCUMENTS CONFIGURATION ====================
-const templateUploadDir = path.join(baseUploadDir, 'templates');
-ensureDirectoryExists(templateUploadDir);
-
-const templateStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Use template ID from params or 'temp' for new templates
-    const templateId = req.params.id || req.body.template_id || 'temp';
-    const templateDir = path.join(templateUploadDir, templateId.toString());
-    ensureDirectoryExists(templateDir);
-    cb(null, templateDir);
+// Profile pictures storage
+const profileStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'onboard-pro/profiles',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    resource_type: 'image',
   },
-  filename: (req, file, cb) => {
-    // Generate safe filename
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const originalName = path.parse(file.originalname).name;
-    const safeName = originalName.replace(/[^a-zA-Z0-9-_]/g, '-');
-    const fileExt = path.extname(file.originalname).toLowerCase();
-    cb(null, `${safeName}-${uniqueSuffix}${fileExt}`);
-  }
 });
 
-const templateFileFilter = (req, file, cb) => {
-  // Allowed file types for template documents
-  const allowedMimeTypes = [
-    // Images
-    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-    // Documents
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    // Text files
-    'text/plain',
-    'text/csv',
-    // Archives
-    'application/zip',
-    'application/x-rar-compressed'
-  ];
+// Documents/templates storage
+const documentStorage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => {
+    const isImage = file.mimetype.startsWith('image/');
+    return {
+      folder: 'onboard-pro/documents',
+      resource_type: isImage ? 'image' : 'raw',
+      allowed_formats: [
+        'jpg', 'jpeg', 'png', 'gif', 'webp',
+        'pdf', 'doc', 'docx', 'xls', 'xlsx',
+        'ppt', 'pptx', 'txt', 'csv', 'zip'
+      ],
+    };
+  },
+});
 
-  const maxFileSize = 10 * 1024 * 1024; // 10MB for documents
-
-  if (!allowedMimeTypes.includes(file.mimetype)) {
-    return cb(new Error(`File type not allowed. Allowed types: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, CSV, Images, ZIP, RAR`), false);
-  }
-
-  if (file.size > maxFileSize) {
-    return cb(new Error(`File size exceeds ${maxFileSize / (1024 * 1024)}MB limit`), false);
-  }
-
-  cb(null, true);
-};
-
-// ==================== EXPORT CONFIGURATIONS ====================
-
-// Profile picture upload (single file)
+// Profile picture upload
 const profileUpload = multer({
   storage: profileStorage,
-  fileFilter: profileFileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB for profile pictures
-    files: 1 // Single file only
-  }
-});
+  limits: { fileSize: 5 * 1024 * 1024 },
+}).single('profile_picture');
 
-// Template document upload (single file)
+// Template document upload (single)
 const templateDocumentUpload = multer({
-  storage: templateStorage,
-  fileFilter: templateFileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB for documents
-    files: 1 // Single file per request
-  }
-});
+  storage: documentStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).single('file');
 
-// Template documents upload (multiple files)
+// Template documents upload (multiple)
 const templateDocumentsUpload = multer({
-  storage: templateStorage,
-  fileFilter: templateFileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB per file
-    files: 10 // Max 10 files per request
-  }
-});
+  storage: documentStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).array('files', 10);
 
-// Generic file upload (for any type)
+// Generic upload
 const genericUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      const type = req.query.type || 'generic';
-      const uploadDir = path.join(baseUploadDir, type);
-      ensureDirectoryExists(uploadDir);
-      cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      const fileExt = path.extname(file.originalname);
-      cb(null, `file-${uniqueSuffix}${fileExt}`);
-    }
-  }),
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB default
-  }
-});
+  storage: documentStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).single('file');
 
 module.exports = {
-  // Single upload middlewares
-  profileUpload: profileUpload.single('profile_picture'),
-  templateDocumentUpload: templateDocumentUpload.single('file'),
-  
-  // Multiple upload middlewares
-  templateDocumentsUpload: templateDocumentsUpload.array('files', 10),
-  
-  // Generic upload middleware
-  genericUpload: genericUpload.single('file'),
-  
-  // Raw configurations for custom usage
+  profileUpload,
+  templateDocumentUpload,
+  templateDocumentsUpload,
+  genericUpload,
   multer,
-  
-  // Helper functions
-  deleteFile: (filePath) => {
-    return new Promise((resolve, reject) => {
-      const fullPath = path.join(__dirname, '../../', filePath);
-      fs.unlink(fullPath, (err) => {
-        if (err) {
-          // If file doesn't exist, consider it deleted
-          if (err.code === 'ENOENT') {
-            resolve(true);
-          } else {
-            reject(err);
-          }
-        } else {
-          resolve(true);
-        }
-      });
-    });
+
+  // deleteFile - now deletes from Cloudinary
+  deleteFile: async (filePath) => {
+    try {
+      await cloudinary.uploader.destroy(filePath);
+      return true;
+    } catch (err) {
+      console.error('Cloudinary delete error:', err);
+      return true;
+    }
   },
-  
+
+  // getFileUrl - Cloudinary already returns full URL
   getFileUrl: (req, filePath) => {
-    if (!filePath) return null;
-    
-    // Remove any leading dots or slashes
-    const cleanPath = filePath.replace(/^\.\.\//, '').replace(/^\//, '');
-    
-    // Return full URL
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    return `${baseUrl}/uploads/${cleanPath}`;
+    return filePath || null;
   },
-  
-  // Utility to clean up orphaned temp files
-  cleanupTempFiles: (tempDir = 'temp', olderThanHours = 24) => {
-    const tempPath = path.join(templateUploadDir, tempDir);
-    
-    if (!fs.existsSync(tempPath)) {
-      return 0;
-    }
-    
-    const files = fs.readdirSync(tempPath);
-    const now = Date.now();
-    const cutoff = olderThanHours * 60 * 60 * 1000; // Convert hours to milliseconds
-    let deletedCount = 0;
-    
-    files.forEach(file => {
-      const filePath = path.join(tempPath, file);
-      const stats = fs.statSync(filePath);
-      
-      // Delete files older than cutoff
-      if (now - stats.mtimeMs > cutoff) {
-        fs.unlinkSync(filePath);
-        deletedCount++;
-      }
-    });
-    
-    // Remove empty directory
-    if (fs.readdirSync(tempPath).length === 0) {
-      fs.rmdirSync(tempPath);
-    }
-    
-    return deletedCount;
-  }
+
+  cleanupTempFiles: () => { return 0; } // No longer needed
 };

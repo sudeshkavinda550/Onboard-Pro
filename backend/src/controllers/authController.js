@@ -701,8 +701,7 @@ exports.uploadProfilePicture = async (req, res) => {
       });
     }
 
-    const profilePictureUrl = `/uploads/profile-pictures/${req.file.filename}`;
-    
+const profilePictureUrl = req.file.path; // Cloudinary full URL    
     const updateProfilePictureSql = `
       UPDATE users 
       SET profile_picture = $1,

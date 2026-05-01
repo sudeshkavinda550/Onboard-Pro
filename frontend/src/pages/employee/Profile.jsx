@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import authApi from '../../api/authApi';
 import { taskApi } from '../../api/taskApi';
+import { useAuth } from '../../context/AuthContext';
 import {
   EnvelopeIcon, PhoneIcon, CalendarIcon, BuildingOfficeIcon,
   IdentificationIcon, MapPinIcon, UserCircleIcon, CheckCircleIcon,
@@ -103,13 +104,11 @@ const TaskDeadlineCalendar = ({ tasks = [] }) => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px' }}>
         <div style={{ padding: 24, borderRight: '1px solid #f1f5f9' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-            <button onClick={() => setViewDate(new Date(year, month - 1, 1))}
-              style={{ width: 32, height: 32, borderRadius: 9, border: '1.5px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+            <button onClick={() => setViewDate(new Date(year, month - 1, 1))} style={{ width: 32, height: 32, borderRadius: 9, border: '1.5px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
               <ChevronLeftIcon style={{ width: 14, height: 14 }} />
             </button>
             <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{MONTH_NAMES[month]} {year}</span>
-            <button onClick={() => setViewDate(new Date(year, month + 1, 1))}
-              style={{ width: 32, height: 32, borderRadius: 9, border: '1.5px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+            <button onClick={() => setViewDate(new Date(year, month + 1, 1))} style={{ width: 32, height: 32, borderRadius: 9, border: '1.5px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
               <ChevronRightIcon style={{ width: 14, height: 14 }} />
             </button>
           </div>
@@ -185,6 +184,7 @@ const TaskDeadlineCalendar = ({ tasks = [] }) => {
 const Profile = () => {
   const location  = useLocation();
   const navigate  = useNavigate();
+  const { refreshUser } = useAuth(); // ← Get refreshUser from context
   const taskId    = location.state?.taskId;
   const taskTitle = location.state?.taskTitle;
   const returnTo  = location.state?.returnTo || '/employee/tasks';
@@ -231,6 +231,7 @@ const Profile = () => {
       if (!Object.keys(payload).length) { toast.warning('Please update at least one field'); setUpdating(false); return; }
       await authApi.updateProfile(payload);
       await fetchProfile();
+      await refreshUser(); // ← Refresh navbar too
       setEditing(false);
       toast.success('Profile updated successfully');
       if (taskId) {
@@ -246,9 +247,18 @@ const Profile = () => {
   const handleProfilePictureUpload = async (file) => {
     try {
       const res = await authApi.uploadProfilePicture(file);
-      if (res?.data?.profile_picture) { setUser(prev => ({ ...prev, profilePicture: res.data.profile_picture })); setImgErr(false); toast.success('Profile picture uploaded'); await fetchProfile(); }
+      if (res?.data?.profile_picture) {
+        setUser(prev => ({ ...prev, profilePicture: res.data.profile_picture }));
+        setImgErr(false);
+        toast.success('Profile picture uploaded');
+        await fetchProfile();
+        await refreshUser(); // ← This updates the navbar immediately!
+      }
       return res?.data?.profile_picture;
-    } catch (err) { toast.error(err.response?.data?.message || 'Failed to upload profile picture'); throw err; }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to upload profile picture');
+      throw err;
+    }
   };
 
   const handleMarkTaskComplete = async () => {
@@ -269,7 +279,9 @@ const Profile = () => {
     </div>
   );
 
-  const profilePicUrl = user?.profilePicture ? `${API_BASE}${user.profilePicture}` : null;
+  const profilePicUrl = user?.profilePicture
+    ? (user.profilePicture.startsWith('http') ? user.profilePicture : `${API_BASE}${user.profilePicture}`)
+    : null;
   const op = user?.onboardingProgress;
 
   const TaskBanner = () => taskId ? (
@@ -312,7 +324,6 @@ const Profile = () => {
       `}</style>
       <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 22 }}>
         <TaskBanner />
-
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, animation: 'slideUp 0.5s ease-out both' }}>
           <div><h1 style={{ fontSize: 30, fontWeight: 800, color: '#0f172a', margin: 0 }}>My Profile</h1><p style={{ fontSize: 14.5, color: '#64748b', margin: '4px 0 0' }}>View and manage your personal information</p></div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -321,20 +332,17 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Dark hero banner with big circle avatar */}
         <div style={{ background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', borderRadius: 22, overflow: 'hidden', position: 'relative', animation: 'slideUp 0.5s ease-out both' }}>
           <div style={{ position: 'absolute', right: 32, top: '50%', transform: 'translateY(-50%)', opacity: 0.04, pointerEvents: 'none' }}>
             <svg width="160" height="160" fill="#fff" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
           </div>
           <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 28, padding: '28px 32px', flexWrap: 'wrap' }}>
-            {/* Large circle avatar */}
             <div style={{ width: 120, height: 120, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, border: '4px solid rgba(255,255,255,0.20)', boxShadow: '0 8px 32px rgba(99,102,241,0.40)' }}>
               {profilePicUrl && !imgErr
                 ? <img src={profilePicUrl} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgErr(true)} />
                 : <span style={{ fontSize: 48, fontWeight: 800, color: '#fff', lineHeight: 1 }}>{user?.name?.charAt(0)?.toUpperCase() || '?'}</span>
               }
             </div>
-            {/* Name / role / badges */}
             <div style={{ flex: 1, minWidth: 200 }}>
               <h2 style={{ fontSize: 28, fontWeight: 800, color: '#fff', margin: '0 0 5px', lineHeight: 1.1 }}>{user?.name || 'No Name'}</h2>
               <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.55)', margin: '0 0 14px' }}>{user?.position || 'No Position'}</p>
@@ -346,7 +354,6 @@ const Profile = () => {
               </div>
             </div>
             <div style={{ width: 1, height: 80, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
-            {/* Quick contact */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 220 }}>
               {[{ Icon: EnvelopeIcon, val: user?.email }, { Icon: PhoneIcon, val: user?.phone || 'Not provided' }, { Icon: CalendarIcon, val: `Joined ${formatDate(user?.startDate)}` }].map(({ Icon, val }, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -360,7 +367,6 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Personal + Employment */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <InfoCard icon={IdentificationIcon} iconBg="linear-gradient(135deg, #3b82f6, #22d3ee)" title="Personal Information" delay={60}>
             <InfoRow icon={IdentificationIcon} label="Full Name"     value={user?.name} />
@@ -389,7 +395,6 @@ const Profile = () => {
           </InfoCard>
         </div>
 
-        {/* Emergency Contact */}
         {(user?.emergencyContactName || user?.emergencyContactPhone || user?.emergencyContactRelation) && (
           <InfoCard icon={PhoneIcon} iconBg="linear-gradient(135deg, #ef4444, #f97316)" title="Emergency Contact" delay={180}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
@@ -400,7 +405,6 @@ const Profile = () => {
           </InfoCard>
         )}
 
-        {/* Onboarding Progress */}
         {op && op.total > 0 && (
           <InfoCard icon={CheckCircleIcon} iconBg="linear-gradient(135deg, #22c55e, #22d3ee)" title="Onboarding Progress" delay={240}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -429,9 +433,7 @@ const Profile = () => {
           </InfoCard>
         )}
 
-        {/* Task Deadline Calendar */}
         <TaskDeadlineCalendar tasks={allTasks} />
-
       </div>
     </div>
   );

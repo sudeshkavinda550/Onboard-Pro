@@ -81,12 +81,12 @@ export const AuthProvider = ({ children }) => {
     const response = await authApi.forgotPassword(email);
     return response.data;
   };
-  
+
   const resetPassword = async (email, otp, password) => {
     const response = await authApi.resetPassword(email, otp, password);
     return response.data;
   };
-  
+
   const verifyEmail = async (token) => {
     const response = await authApi.verifyEmail(token);
     return response.data;
@@ -99,8 +99,25 @@ export const AuthProvider = ({ children }) => {
     return response.data.user;
   };
 
+  // Refreshes user data from server and updates context
+  const refreshUser = async () => {
+    try {
+      const response = await authApi.getProfile();
+      const userData = response.data;
+      setUser(prev => ({
+        ...prev,
+        ...userData,
+        profile_picture: userData.profile_picture,
+      }));
+      return userData;
+    } catch (error) {
+      console.error('Failed to refresh user:', error);
+    }
+  };
+
   const value = {
     user,
+    setUser,
     login,
     logout,
     register,
@@ -108,6 +125,7 @@ export const AuthProvider = ({ children }) => {
     forgotPassword,
     resetPassword,
     updateProfile,
+    refreshUser,
     loading
   };
 
